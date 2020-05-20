@@ -3,16 +3,27 @@
 //! A library for supervising the light client processes and detecting forks. This should be a
 //! primary gateway for external users wanting to securily verify a Tendermint blockchain.
 
-pub use tendermint::lite::types::Height;
-pub use tendermint::block::signed_header::SignedHeader;
-pub use std::time::SystemTime;
+use tendermint::lite::types::Height;
+// use tendermint::block::signed_header::SignedHeader;
+// use std::time::SystemTime;
 
+#[derive(Debug)]
 struct LightBlock {
     height: Height,
-    header: SignedHeader,
+}
+
+impl PartialEq for LightBlock {
+    fn eq(&self, other: &Self) -> bool {
+        self.height == other.height
+    }
 }
 
 trait LightClient {
+    // lifecycle management
+    fn run(&self);
+    fn shutdown(&self);
+
+    // fork detection
     fn light_block(&self, h: Height) -> Option<LightBlock>;
 }
 
@@ -26,13 +37,13 @@ struct Supervisor {
 }
 
 impl Supervisor {
-    // At least two light clients are required.
     pub fn new(
         trust_n: u8,
         light_clients: Vec<Box<dyn LightClient>>,
     ) -> Self {
+        // At least two light clients are required.
         if trust_n < 2 {
-
+            panic!("trust number must be greater than two")
         }
         if light_clients.len() < trust_n.into() {
             panic!("number of light clients is less than the trust number")
@@ -43,11 +54,17 @@ impl Supervisor {
         }
     }
 
-    // pub fn run(&self) {
-    //     for lc in self.light_clients {
-    //         lc.run()
-    //     }
-    // }
+    pub fn run(&self) {
+        for lc in &self.light_clients {
+            lc.run()
+        }
+    }
+
+    pub fn shutdown(&self) {
+        for lc in &self.light_clients {
+            lc.shutdown()
+        }
+    }
 
     pub fn light_block(&self, h: Height) -> Option<LightBlock> {
         let mut i = self.trust_n;
@@ -66,8 +83,34 @@ impl Supervisor {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    struct MockLightClient {
+        // blocks: Vec<LightBlock>,
+    }
+
+    impl LightClient for MockLightClient {
+        fn run(&self) {
+
+        }
+
+        fn shutdown(&self) {
+
+        }
+
+        fn light_block(&self, _h: Height) -> Option<LightBlock> {
+            None
+        }
+    }
+
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn supervisor_detects_forks() {
+        let block = LightBlock{height: 1};
+        let clients: Vec<Box<dyn LightClient>> = vec![Box::new(MockLightClient{}), Box::new(MockLightClient{})];
+        let sup = Supervisor::new(2, clients);
+
+        sup.run();
+
+        assert_eq!(block, sup.light_block(1).unwrap())
     }
 }
